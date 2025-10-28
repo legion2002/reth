@@ -1,6 +1,6 @@
 use crate::{
     error::{Eip4844PoolTransactionError, InvalidPoolTransactionError},
-    identifier::{SenderId, TransactionId},
+    identifier::{PoolSenderId, TransactionId},
     pool::pending::PendingTransaction,
     PoolTransaction, Priority, TransactionOrdering, ValidPoolTransaction,
 };
@@ -92,7 +92,7 @@ pub struct BestTransactions<T: TransactionOrdering> {
     /// then can be moved from the `all` set to the `independent` set.
     pub(crate) independent: BTreeSet<PendingTransaction<T>>,
     /// There might be the case where a yielded transactions is invalid, this will track it.
-    pub(crate) invalid: HashSet<SenderId>,
+    pub(crate) invalid: HashSet<PoolSenderId>,
     /// Used to receive any new pending transactions that have been added to the pool after this
     /// iterator was static filtered
     ///

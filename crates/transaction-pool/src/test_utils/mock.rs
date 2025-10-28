@@ -1,7 +1,7 @@
 //! Mock types.
 
 use crate::{
-    identifier::{SenderIdentifiers, TransactionId},
+    identifier::{DefaultSenderIdentifiers, SenderIdentifiers, TransactionId},
     pool::txpool::TxPool,
     traits::TransactionOrigin,
     CoinbaseTipOrdering, EthBlobTransactionSidecar, EthPoolTransaction, PoolTransaction,
@@ -1345,7 +1345,7 @@ impl proptest::arbitrary::Arbitrary for MockTransaction {
 /// A factory for creating and managing various types of mock transactions.
 #[derive(Debug, Default)]
 pub struct MockTransactionFactory {
-    pub(crate) ids: SenderIdentifiers,
+    pub(crate) ids: DefaultSenderIdentifiers,
 }
 
 // === impl MockTransactionFactory ===

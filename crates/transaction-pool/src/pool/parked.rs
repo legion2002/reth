@@ -1,5 +1,5 @@
 use crate::{
-    identifier::{SenderId, TransactionId},
+    identifier::{PoolSenderId, TransactionId},
     pool::size::SizeTracker,
     PoolTransaction, SubPoolLimit, ValidPoolTransaction, TXPOOL_MAX_ACCOUNT_SLOTS_PER_SENDER,
 };
@@ -33,7 +33,7 @@ pub struct ParkedPool<T: ParkedOrd> {
     last_sender_submission: BTreeSet<SubmissionSenderId>,
     /// Keeps track of the number of transactions in the pool by the sender and the last submission
     /// id.
-    sender_transaction_count: FxHashMap<SenderId, SenderTransactionCount>,
+    sender_transaction_count: FxHashMap<PoolSenderId, SenderTransactionCount>,
     /// Keeps track of the size of this pool.
     ///
     /// See also [`reth_primitives_traits::InMemorySize::size`].
@@ -65,7 +65,7 @@ impl<T: ParkedOrd> ParkedPool<T> {
 
     /// Increments the count of transactions for the given sender and updates the tracked submission
     /// id.
-    fn add_sender_count(&mut self, sender: SenderId, submission_id: u64) {
+    fn add_sender_count(&mut self, sender: PoolSenderId, submission_id: u64) {
         match self.sender_transaction_count.entry(sender) {
             Entry::Occupied(mut entry) => {
                 let value = entry.get_mut();
@@ -91,7 +91,7 @@ impl<T: ParkedOrd> ParkedPool<T> {
     ///
     /// Note: this does not update the tracked submission id for the sender, because we're only
     /// interested in the __last__ submission id when truncating the pool.
-    fn remove_sender_count(&mut self, sender_id: SenderId) {
+    fn remove_sender_count(&mut self, sender_id: PoolSenderId) {
         let removed_sender = match self.sender_transaction_count.entry(sender_id) {
             Entry::Occupied(mut entry) => {
                 let value = entry.get_mut();
@@ -142,7 +142,7 @@ impl<T: ParkedOrd> ParkedPool<T> {
     /// `TXPOOL_MAX_ACCOUNT_SLOTS_PER_SENDER` transactions.
     pub(crate) fn get_txs_by_sender(
         &self,
-        sender: SenderId,
+        sender: PoolSenderId,
     ) -> SmallVec<[TransactionId; TXPOOL_MAX_ACCOUNT_SLOTS_PER_SENDER]> {
         self.by_id
             .range((sender.start_bound(), Unbounded))
@@ -397,14 +397,14 @@ impl<T: ParkedOrd> Ord for ParkedPoolTransaction<T> {
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub(crate) struct SubmissionSenderId {
     /// The sender id
-    pub(crate) sender_id: SenderId,
+    pub(crate) sender_id: PoolSenderId,
     /// The submission id
     pub(crate) submission_id: u64,
 }
 
 impl SubmissionSenderId {
     /// Creates a new [`SubmissionSenderId`] based on the [`SenderId`] and `submission_id`.
-    const fn new(sender_id: SenderId, submission_id: u64) -> Self {
+    const fn new(sender_id: PoolSenderId, submission_id: u64) -> Self {
         Self { sender_id, submission_id }
     }
 }
@@ -760,7 +760,7 @@ mod tests {
         pool.add_transaction(tx);
 
         // Define a new sender ID and submission ID
-        let sender: SenderId = 11.into();
+        let sender: PoolSenderId = 11.into();
         let submission_id = 1;
 
         // Add the sender count to the pool
@@ -790,7 +790,7 @@ mod tests {
         pool.add_transaction(tx);
 
         // Define a sender ID and initial submission ID
-        let sender: SenderId = 11.into();
+        let sender: PoolSenderId = 11.into();
         let initial_submission_id = 1;
 
         // Add the sender count to the pool with the initial submission ID
@@ -827,8 +827,8 @@ mod tests {
         pool.add_transaction(tx2);
 
         // Define two different sender IDs and their corresponding submission IDs
-        let sender1: SenderId = 11.into();
-        let sender2: SenderId = 22.into();
+        let sender1: PoolSenderId = 11.into();
+        let sender2: PoolSenderId = 22.into();
 
         // Add the sender counts to the pool
         pool.add_sender_count(sender1, 1);
@@ -873,8 +873,8 @@ mod tests {
         pool.add_transaction(tx2);
 
         // Define two different sender IDs and their corresponding submission IDs
-        let sender1: SenderId = 11.into();
-        let sender2: SenderId = 22.into();
+        let sender1: PoolSenderId = 11.into();
+        let sender2: PoolSenderId = 22.into();
 
         // Add the sender counts to the pool
         pool.add_sender_count(sender1, 1);

@@ -68,7 +68,7 @@
 use crate::{
     blobstore::BlobStore,
     error::{PoolError, PoolErrorKind, PoolResult},
-    identifier::{SenderId, SenderIdentifiers, TransactionId},
+    identifier::{DefaultSenderIdentifiers, PoolSenderId, SenderIdentifiers, TransactionId},
     metrics::BlobStoreMetrics,
     pool::{
         listener::{
@@ -131,8 +131,8 @@ pub struct PoolInner<V, T, S>
 where
     T: TransactionOrdering,
 {
-    /// Internal mapping of addresses to plain ints.
-    identifiers: RwLock<SenderIdentifiers>,
+    /// Internal mapping of addresses to sender identifiers.
+    identifiers: RwLock<DefaultSenderIdentifiers>,
     /// Transaction validator.
     validator: V,
     /// Storage for blob transactions
@@ -196,13 +196,13 @@ where
         self.pool.write().set_block_info(info)
     }
 
-    /// Returns the internal [`SenderId`] for this address
-    pub fn get_sender_id(&self, addr: Address) -> SenderId {
+    /// Returns the internal [`PoolSenderId`] for this address
+    pub fn get_sender_id(&self, addr: Address) -> PoolSenderId {
         self.identifiers.write().sender_id_or_create(addr)
     }
 
-    /// Returns the internal [`SenderId`]s for the given addresses.
-    pub fn get_sender_ids(&self, addrs: impl IntoIterator<Item = Address>) -> Vec<SenderId> {
+    /// Returns the internal [`PoolSenderId`]s for the given addresses.
+    pub fn get_sender_ids(&self, addrs: impl IntoIterator<Item = Address>) -> Vec<PoolSenderId> {
         self.identifiers.write().sender_ids_or_create(addrs)
     }
 
@@ -216,7 +216,7 @@ where
     fn changed_senders(
         &self,
         accs: impl Iterator<Item = ChangedAccount>,
-    ) -> FxHashMap<SenderId, SenderInfo> {
+    ) -> FxHashMap<PoolSenderId, SenderInfo> {
         let mut identifiers = self.identifiers.write();
         accs.into_iter()
             .map(|acc| {
@@ -1367,7 +1367,7 @@ impl<T: PoolTransaction> OnNewCanonicalStateOutcome<T> {
 mod tests {
     use crate::{
         blobstore::{BlobStore, InMemoryBlobStore},
-        identifier::SenderId,
+        identifier::PoolSenderId,
         test_utils::{MockTransaction, TestPoolBuilder},
         validate::ValidTransaction,
         BlockInfo, PoolConfig, SubPoolLimit, TransactionOrigin, TransactionValidationOutcome, U256,
@@ -1482,6 +1482,6 @@ mod tests {
         );
 
         let identifiers = test_pool.identifiers.read();
-        assert_eq!(identifiers.sender_id(&auth), Some(SenderId::from(1)));
+        assert_eq!(identifiers.sender_id(&auth), Some(PoolSenderId::from(1)));
     }
 }

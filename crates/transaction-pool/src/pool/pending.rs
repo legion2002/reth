@@ -1,7 +1,7 @@
 //! Pending transactions
 
 use crate::{
-    identifier::{SenderId, TransactionId},
+    identifier::{PoolSenderId, TransactionId},
     pool::{
         best::{BestTransactions, BestTransactionsWithFees},
         size::SizeTracker,
@@ -39,10 +39,10 @@ pub struct PendingPool<T: TransactionOrdering> {
     by_id: BTreeMap<TransactionId, PendingTransaction<T>>,
     /// The highest nonce transactions for each sender - like the `independent` set, but the
     /// highest instead of lowest nonce.
-    highest_nonces: FxHashMap<SenderId, PendingTransaction<T>>,
+    highest_nonces: FxHashMap<PoolSenderId, PendingTransaction<T>>,
     /// Independent transactions that can be included directly and don't require other
     /// transactions.
-    independent_transactions: FxHashMap<SenderId, PendingTransaction<T>>,
+    independent_transactions: FxHashMap<PoolSenderId, PendingTransaction<T>>,
     /// Keeps track of the size of this pool.
     ///
     /// See also [`reth_primitives_traits::InMemorySize::size`].
@@ -519,7 +519,9 @@ impl<T: TransactionOrdering> PendingPool<T> {
     }
 
     /// Independent transactions
-    pub const fn independent_transactions(&self) -> &FxHashMap<SenderId, PendingTransaction<T>> {
+    pub const fn independent_transactions(
+        &self,
+    ) -> &FxHashMap<PoolSenderId, PendingTransaction<T>> {
         &self.independent_transactions
     }
 
@@ -540,14 +542,14 @@ impl<T: TransactionOrdering> PendingPool<T> {
     }
 
     /// Get transactions by sender
-    pub(crate) fn get_txs_by_sender(&self, sender: SenderId) -> Vec<TransactionId> {
+    pub(crate) fn get_txs_by_sender(&self, sender: PoolSenderId) -> Vec<TransactionId> {
         self.iter_txs_by_sender(sender).copied().collect()
     }
 
     /// Returns an iterator over all transaction with the sender id
     pub(crate) fn iter_txs_by_sender(
         &self,
-        sender: SenderId,
+        sender: PoolSenderId,
     ) -> impl Iterator<Item = &TransactionId> + '_ {
         self.by_id
             .range((sender.start_bound(), Unbounded))
@@ -562,7 +564,7 @@ impl<T: TransactionOrdering> PendingPool<T> {
 
     /// Returns a reference to the independent transactions in the pool
     #[cfg(test)]
-    pub(crate) const fn independent(&self) -> &FxHashMap<SenderId, PendingTransaction<T>> {
+    pub(crate) const fn independent(&self) -> &FxHashMap<PoolSenderId, PendingTransaction<T>> {
         &self.independent_transactions
     }
 

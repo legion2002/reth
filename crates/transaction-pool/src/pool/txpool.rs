@@ -6,7 +6,7 @@ use crate::{
         Eip4844PoolTransactionError, Eip7702PoolTransactionError, InvalidPoolTransactionError,
         PoolError, PoolErrorKind,
     },
-    identifier::{SenderId, TransactionId},
+    identifier::{PoolSenderId, TransactionId},
     metrics::{AllTransactionsMetrics, TxPoolMetrics},
     pool::{
         best::BestTransactions,
@@ -86,7 +86,7 @@ use tracing::{trace, warn};
 /// ```
 pub struct TxPool<T: TransactionOrdering> {
     /// Contains the currently known information about the senders.
-    sender_info: FxHashMap<SenderId, SenderInfo>,
+    sender_info: FxHashMap<PoolSenderId, SenderInfo>,
     /// pending subpool
     ///
     /// Holds transactions that are ready to be executed on the current state.
@@ -142,7 +142,7 @@ impl<T: TransactionOrdering> TxPool<T> {
     }
 
     /// Retrieves the highest nonce for a specific sender from the transaction pool.
-    pub fn get_highest_nonce_by_sender(&self, sender: SenderId) -> Option<u64> {
+    pub fn get_highest_nonce_by_sender(&self, sender: PoolSenderId) -> Option<u64> {
         self.all().txs_iter(sender).last().map(|(_, tx)| tx.transaction.nonce())
     }
 
@@ -150,7 +150,7 @@ impl<T: TransactionOrdering> TxPool<T> {
     /// transaction pool.
     pub fn get_highest_transaction_by_sender(
         &self,
-        sender: SenderId,
+        sender: PoolSenderId,
     ) -> Option<Arc<ValidPoolTransaction<T::Transaction>>> {
         self.all().txs_iter(sender).last().map(|(_, tx)| Arc::clone(&tx.transaction))
     }
@@ -482,7 +482,7 @@ impl<T: TransactionOrdering> TxPool<T> {
     /// Returns all pending transactions for the specified sender
     pub(crate) fn pending_txs_by_sender(
         &self,
-        sender: SenderId,
+        sender: PoolSenderId,
     ) -> Vec<Arc<ValidPoolTransaction<T::Transaction>>> {
         self.pending_transactions_iter().filter(|tx| tx.sender_id() == sender).collect()
     }
@@ -507,7 +507,7 @@ impl<T: TransactionOrdering> TxPool<T> {
     /// Returns queued and pending transactions for the specified sender
     pub fn queued_and_pending_txs_by_sender(
         &self,
-        sender: SenderId,
+        sender: PoolSenderId,
     ) -> (SmallVec<[TransactionId; TXPOOL_MAX_ACCOUNT_SLOTS_PER_SENDER]>, Vec<TransactionId>) {
         (self.queued_pool.get_txs_by_sender(sender), self.pending_pool.get_txs_by_sender(sender))
     }
@@ -515,7 +515,7 @@ impl<T: TransactionOrdering> TxPool<T> {
     /// Returns all queued transactions for the specified sender
     pub(crate) fn queued_txs_by_sender(
         &self,
-        sender: SenderId,
+        sender: PoolSenderId,
     ) -> Vec<Arc<ValidPoolTransaction<T::Transaction>>> {
         self.queued_transactions_iter().filter(|tx| tx.sender_id() == sender).collect()
     }
@@ -561,7 +561,7 @@ impl<T: TransactionOrdering> TxPool<T> {
     /// Returns all transactions sent from the given sender.
     pub(crate) fn get_transactions_by_sender(
         &self,
-        sender: SenderId,
+        sender: PoolSenderId,
     ) -> Vec<Arc<ValidPoolTransaction<T::Transaction>>> {
         self.all_transactions.txs_iter(sender).map(|(_, tx)| Arc::clone(&tx.transaction)).collect()
     }
@@ -622,7 +622,7 @@ impl<T: TransactionOrdering> TxPool<T> {
     /// Updates the transactions for the changed senders.
     pub(crate) fn update_accounts(
         &mut self,
-        changed_senders: FxHashMap<SenderId, SenderInfo>,
+        changed_senders: FxHashMap<PoolSenderId, SenderInfo>,
     ) -> UpdateOutcome<T::Transaction> {
         // Apply the state changes to the total set of transactions which triggers sub-pool updates.
         let updates = self.all_transactions.update(&changed_senders);
@@ -645,7 +645,7 @@ impl<T: TransactionOrdering> TxPool<T> {
         &mut self,
         block_info: BlockInfo,
         mined_transactions: Vec<TxHash>,
-        changed_senders: FxHashMap<SenderId, SenderInfo>,
+        changed_senders: FxHashMap<PoolSenderId, SenderInfo>,
         update_kind: PoolUpdateKind,
     ) -> OnNewCanonicalStateOutcome<T::Transaction> {
         // update block info
@@ -1015,7 +1015,7 @@ impl<T: TransactionOrdering> TxPool<T> {
     /// Removes all transactions from the given sender.
     pub(crate) fn remove_transactions_by_sender(
         &mut self,
-        sender_id: SenderId,
+        sender_id: PoolSenderId,
     ) -> Vec<Arc<ValidPoolTransaction<T::Transaction>>> {
         let mut removed = Vec::new();
         let txs = self.get_transactions_by_sender(sender_id);
@@ -1329,7 +1329,7 @@ pub(crate) struct AllTransactions<T: PoolTransaction> {
     /// _All_ transaction in the pool sorted by their sender and nonce pair.
     txs: BTreeMap<TransactionId, PoolInternalTransaction<T>>,
     /// Tracks the number of transactions by sender that are currently in the pool.
-    tx_counter: FxHashMap<SenderId, usize>,
+    tx_counter: FxHashMap<PoolSenderId, usize>,
     /// The current block number the pool keeps track of.
     last_seen_block_number: u64,
     /// The current block hash the pool keeps track of.
@@ -1341,7 +1341,7 @@ pub(crate) struct AllTransactions<T: PoolTransaction> {
     /// How to handle [`TransactionOrigin::Local`](crate::TransactionOrigin) transactions.
     local_transactions_config: LocalTransactionConfig,
     /// All accounts with a pooled authorization
-    auths: FxHashMap<SenderId, HashSet<TxHash>>,
+    auths: FxHashMap<PoolSenderId, HashSet<TxHash>>,
     /// All Transactions metrics
     metrics: AllTransactionsMetrics,
 }
@@ -1383,14 +1383,14 @@ impl<T: PoolTransaction> AllTransactions<T> {
     }
 
     /// Increments the transaction counter for the sender
-    pub(crate) fn tx_inc(&mut self, sender: SenderId) {
+    pub(crate) fn tx_inc(&mut self, sender: PoolSenderId) {
         let count = self.tx_counter.entry(sender).or_default();
         *count += 1;
         self.metrics.all_transactions_by_all_senders.increment(1.0);
     }
 
     /// Decrements the transaction counter for the sender
-    pub(crate) fn tx_decr(&mut self, sender: SenderId) {
+    pub(crate) fn tx_decr(&mut self, sender: PoolSenderId) {
         if let hash_map::Entry::Occupied(mut entry) = self.tx_counter.entry(sender) {
             let count = entry.get_mut();
             if *count == 1 {
@@ -1450,7 +1450,7 @@ impl<T: PoolTransaction> AllTransactions<T> {
     /// that got transaction included in the block.
     pub(crate) fn update(
         &mut self,
-        changed_accounts: &FxHashMap<SenderId, SenderInfo>,
+        changed_accounts: &FxHashMap<PoolSenderId, SenderInfo>,
     ) -> Vec<PoolUpdate> {
         // pre-allocate a few updates
         let mut updates = Vec::with_capacity(64);
@@ -1619,7 +1619,7 @@ impl<T: PoolTransaction> AllTransactions<T> {
     /// nonce
     pub(crate) fn txs_iter(
         &self,
-        sender: SenderId,
+        sender: PoolSenderId,
     ) -> impl Iterator<Item = (&TransactionId, &PoolInternalTransaction<T>)> + '_ {
         self.txs
             .range((sender.start_bound(), Unbounded))
@@ -1632,7 +1632,7 @@ impl<T: PoolTransaction> AllTransactions<T> {
     #[expect(dead_code)]
     pub(crate) fn txs_iter_mut(
         &mut self,
-        sender: SenderId,
+        sender: PoolSenderId,
     ) -> impl Iterator<Item = (&TransactionId, &mut PoolInternalTransaction<T>)> + '_ {
         self.txs
             .range_mut((sender.start_bound(), Unbounded))
@@ -2119,7 +2119,7 @@ impl<T: PoolTransaction> AllTransactions<T> {
     /// This function retrieves the number of transactions stored in the pool for a specific sender.
     ///
     /// If there are no transactions for the given sender, it returns zero by default.
-    pub(crate) fn tx_count(&self, sender: SenderId) -> usize {
+    pub(crate) fn tx_count(&self, sender: PoolSenderId) -> usize {
         self.tx_counter.get(&sender).copied().unwrap_or_default()
     }
 }

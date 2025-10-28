@@ -2,7 +2,7 @@
 
 use crate::{
     error::InvalidPoolTransactionError,
-    identifier::{SenderId, TransactionId},
+    identifier::{PoolSenderId, TransactionId},
     traits::{PoolTransaction, TransactionOrigin},
     PriceBumpConfig,
 };
@@ -303,7 +303,7 @@ pub struct ValidPoolTransaction<T: PoolTransaction> {
     /// Where this transaction originated from.
     pub origin: TransactionOrigin,
     /// The sender ids of the 7702 transaction authorities.
-    pub authority_ids: Option<Vec<SenderId>>,
+    pub authority_ids: Option<Vec<PoolSenderId>>,
 }
 
 // === impl ValidPoolTransaction ===
@@ -335,7 +335,7 @@ impl<T: PoolTransaction> ValidPoolTransaction<T> {
     }
 
     /// Returns the internal identifier for the sender of this transaction
-    pub const fn sender_id(&self) -> SenderId {
+    pub const fn sender_id(&self) -> PoolSenderId {
         self.transaction_id.sender
     }
 
