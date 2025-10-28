@@ -31,14 +31,15 @@ pub trait SenderId:
         Self: Sized;
 }
 
-/// Default simple sender identifier based on a monotonic counter.
+/// Default sender identifier used by the transaction pool.
 ///
-/// This is the default implementation that maps each unique address to a simple u64 identifier.
+/// This is the default implementation based on a monotonic counter that maps
+/// each unique address to a u64 identifier.
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub struct SimpleSenderId(u64);
+pub struct PoolSenderId(u64);
 
-impl SimpleSenderId {
-    /// Creates a new SimpleSenderId from a u64.
+impl PoolSenderId {
+    /// Creates a new PoolSenderId from a u64.
     pub const fn new(id: u64) -> Self {
         Self(id)
     }
@@ -59,7 +60,7 @@ impl SimpleSenderId {
     }
 }
 
-impl SenderId for SimpleSenderId {
+impl SenderId for PoolSenderId {
     fn start_bound(&self) -> std::ops::Bound<TransactionId<Self>> {
         std::ops::Bound::Included(TransactionId::new(*self, 0))
     }
@@ -69,7 +70,7 @@ impl SenderId for SimpleSenderId {
     }
 }
 
-impl From<u64> for SimpleSenderId {
+impl From<u64> for PoolSenderId {
     fn from(value: u64) -> Self {
         Self(value)
     }
@@ -100,42 +101,42 @@ pub trait SenderIdentifiers: std::fmt::Debug + Send + Sync {
 
 /// Default implementation of [`SenderIdentifiers`] using simple address-based mapping.
 ///
-/// This assigns a unique [`SimpleSenderId`] for each new [`Address`].
+/// This assigns a unique [`PoolSenderId`] for each new [`Address`].
 /// It has capacity for 2^64 unique addresses.
 #[derive(Debug, Default)]
 pub struct DefaultSenderIdentifiers {
     /// The identifier to use next.
     id: u64,
     /// Assigned identifier for each address.
-    address_to_id: HashMap<Address, SimpleSenderId>,
+    address_to_id: HashMap<Address, PoolSenderId>,
     /// Reverse mapping of identifier to address.
-    sender_to_address: FxHashMap<SimpleSenderId, Address>,
+    sender_to_address: FxHashMap<PoolSenderId, Address>,
 }
 
 impl DefaultSenderIdentifiers {
-    /// Returns the [`SimpleSenderId`] that belongs to the given address, if it exists
-    pub fn sender_id(&self, addr: &Address) -> Option<SimpleSenderId> {
+    /// Returns the [`PoolSenderId`] that belongs to the given address, if it exists
+    pub fn sender_id(&self, addr: &Address) -> Option<PoolSenderId> {
         self.address_to_id.get(addr).copied()
     }
 
-    /// Returns the existing [`SimpleSenderId`]s or assigns new ones for the given addresses.
+    /// Returns the existing [`PoolSenderId`]s or assigns new ones for the given addresses.
     pub fn sender_ids_or_create(
         &mut self,
         addrs: impl IntoIterator<Item = Address>,
-    ) -> Vec<SimpleSenderId> {
+    ) -> Vec<PoolSenderId> {
         addrs.into_iter().map(|addr| self.sender_id_or_create(addr)).collect()
     }
 
     /// Returns the current identifier and increments the counter.
-    fn next_id(&mut self) -> SimpleSenderId {
-        let id = SimpleSenderId(self.id);
+    fn next_id(&mut self) -> PoolSenderId {
+        let id = PoolSenderId(self.id);
         self.id = self.id.wrapping_add(1);
         id
     }
 }
 
 impl SenderIdentifiers for DefaultSenderIdentifiers {
-    type Id = SimpleSenderId;
+    type Id = PoolSenderId;
 
     fn address(&self, id: &Self::Id) -> Option<&Address> {
         self.sender_to_address.get(id)
@@ -156,10 +157,6 @@ impl SenderIdentifiers for DefaultSenderIdentifiers {
     }
 }
 
-// Type alias for backward compatibility in internal pool code
-// Most pool code uses this concrete type rather than being generic
-pub(crate) type PoolSenderId = SimpleSenderId;
-
 /// A unique identifier of a transaction of a Sender.
 ///
 /// This serves as an identifier for dependencies of a transaction:
@@ -167,7 +164,7 @@ pub(crate) type PoolSenderId = SimpleSenderId;
 ///
 /// Generic over `S` to support different sender identifier schemes.
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub struct TransactionId<S: SenderId = SimpleSenderId> {
+pub struct TransactionId<S: SenderId = PoolSenderId> {
     /// Sender of this transaction
     pub sender: S,
     /// Nonce of this transaction
@@ -214,7 +211,7 @@ mod tests {
 
     #[test]
     fn test_transaction_id_new() {
-        let sender = SimpleSenderId::new(1);
+        let sender = PoolSenderId::new(1);
         let tx_id = TransactionId::new(sender, 5);
         assert_eq!(tx_id.sender, sender);
         assert_eq!(tx_id.nonce, 5);
@@ -222,7 +219,7 @@ mod tests {
 
     #[test]
     fn test_transaction_id_ancestor() {
-        let sender = SimpleSenderId::new(1);
+        let sender = PoolSenderId::new(1);
 
         // Special case with nonce 0 and higher on-chain nonce
         let tx_id = TransactionId::ancestor(0, 1, sender);
@@ -247,7 +244,7 @@ mod tests {
 
     #[test]
     fn test_transaction_id_unchecked_ancestor() {
-        let sender = SimpleSenderId::new(1);
+        let sender = PoolSenderId::new(1);
 
         // Ancestor is the previous nonce if transaction nonce is higher than 0
         let tx_id = TransactionId::new(sender, 5);
@@ -260,7 +257,7 @@ mod tests {
 
     #[test]
     fn test_transaction_id_descendant() {
-        let sender = SimpleSenderId::new(1);
+        let sender = PoolSenderId::new(1);
         let tx_id = TransactionId::new(sender, 5);
         let descendant = tx_id.descendant();
         assert_eq!(descendant, TransactionId::new(sender, 6));
@@ -268,15 +265,15 @@ mod tests {
 
     #[test]
     fn test_transaction_id_next_nonce() {
-        let sender = SimpleSenderId::new(1);
+        let sender = PoolSenderId::new(1);
         let tx_id = TransactionId::new(sender, 5);
         assert_eq!(tx_id.next_nonce(), 6);
     }
 
     #[test]
     fn test_transaction_id_ord_eq_sender() {
-        let tx1 = TransactionId::new(SimpleSenderId::from(100u64), 0u64);
-        let tx2 = TransactionId::new(SimpleSenderId::from(100u64), 1u64);
+        let tx1 = TransactionId::new(PoolSenderId::from(100u64), 0u64);
+        let tx2 = TransactionId::new(PoolSenderId::from(100u64), 1u64);
         assert!(tx2 > tx1);
         let set = BTreeSet::from([tx1, tx2]);
         assert_eq!(set.into_iter().collect::<Vec<_>>(), vec![tx1, tx2]);
@@ -284,8 +281,8 @@ mod tests {
 
     #[test]
     fn test_transaction_id_ord() {
-        let tx1 = TransactionId::new(SimpleSenderId::from(99u64), 0u64);
-        let tx2 = TransactionId::new(SimpleSenderId::from(100u64), 1u64);
+        let tx1 = TransactionId::new(PoolSenderId::from(99u64), 0u64);
+        let tx2 = TransactionId::new(PoolSenderId::from(100u64), 1u64);
         assert!(tx2 > tx1);
         let set = BTreeSet::from([tx1, tx2]);
         assert_eq!(set.into_iter().collect::<Vec<_>>(), vec![tx1, tx2]);
@@ -332,20 +329,20 @@ mod tests {
 
         // The current ID is `u64::MAX`, the next ID should wrap around to 0.
         let id1 = identifiers.next_id();
-        assert_eq!(id1, SimpleSenderId::new(u64::MAX));
+        assert_eq!(id1, PoolSenderId::new(u64::MAX));
 
         // The next ID should now be 0 because of wrapping.
         let id2 = identifiers.next_id();
-        assert_eq!(id2, SimpleSenderId::new(0));
+        assert_eq!(id2, PoolSenderId::new(0));
 
         // And then 1, continuing incrementing.
         let id3 = identifiers.next_id();
-        assert_eq!(id3, SimpleSenderId::new(1));
+        assert_eq!(id3, PoolSenderId::new(1));
     }
 
     #[test]
     fn test_sender_id_start_bound() {
-        let sender = SimpleSenderId::new(1);
+        let sender = PoolSenderId::new(1);
         let start_bound = sender.start_bound();
         if let std::ops::Bound::Included(tx_id) = start_bound {
             assert_eq!(tx_id, TransactionId::new(sender, 0));
